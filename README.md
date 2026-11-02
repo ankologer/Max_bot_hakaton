@@ -9,7 +9,7 @@ Loguru и `python-dotenv`. Получение событий — только lo
 Заполните `BOT_TOKEN` в `.env` и запустите:
 
 ```bash
-cd ~/maxbot-hahaton
+cd ~/Max_bot_hakaton
 .venv/bin/python -m src.main
 ```
 
@@ -41,7 +41,7 @@ python -m src.main --LOG_FILE="logs/my bot.log"
 Для развёртывания с нуля:
 
 ```bash
-cd ~/maxbot-hahaton
+cd ~/Max_bot_hakaton
 python3.12 -m venv .venv
 source .venv/bin/activate
 python -m pip install -r requirements.txt
