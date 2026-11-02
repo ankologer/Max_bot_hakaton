@@ -1,0 +1,9 @@
+**
+!Dockerfile
+!requirements.txt
+!src/
+!src/**
+**/__pycache__/
+**/*.py[cod]
+**/.env
+**/.env.*

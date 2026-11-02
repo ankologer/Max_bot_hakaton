@@ -1,0 +1,4 @@
+maxo==0.10.0
+tortoise-orm==1.1.9
+loguru==0.7.3
+python-dotenv==1.2.4
