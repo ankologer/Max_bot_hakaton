@@ -22,14 +22,15 @@ class LogLevel(StrEnum):
 HELP_TEXT = """Бот MAX — получение событий через long polling.
 
 Запуск из корня проекта:
+  python src/main.py
+  python src/main.py --LOG_LEVEL=DEBUG
+  python src/main.py --DATABASE_PATH=data/dev.sqlite3
   python -m src.main
-  python -m src.main --LOG_LEVEL=DEBUG
-  python -m src.main --DATABASE_PATH=data/dev.sqlite3
 
 Справка (без запуска бота):
-  python -m src.main -h
-  python -m src.main --help
-  python -m src.main help
+  python src/main.py -h
+  python src/main.py --help
+  python src/main.py help
 
 Приоритет настроек: --KEY=VALUE, затем .env, затем окружение процесса.
 Для повторяющегося KEY используется последнее значение из команды.
@@ -40,7 +41,7 @@ HELP_TEXT = """Бот MAX — получение событий через long 
   LOG_FILE       Файл логов (по умолчанию logs/bot.log).
   LOG_LEVEL      Уровень логирования (по умолчанию INFO).
 
-Остановка: Ctrl+C или SIGTERM.
+Остановка: Ctrl+C; в контейнере также поддерживается SIGTERM.
 """
 
 

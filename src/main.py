@@ -1,14 +1,18 @@
-"""Точка входа в программу.
+r"""Точка входа в программу.
 
 Примеры команд для запуска (из корня проекта):
-- ./.venv/bin/python -m src.main
-- ./.venv/bin/python -m src.main --LOG_LEVEL=DEBUG
-- ./.venv/bin/python -m src.main --DATABASE_PATH=data/dev.sqlite3
+- python src/main.py
+- python src/main.py --LOG_LEVEL=DEBUG
+- python src/main.py --DATABASE_PATH=data/dev.sqlite3
+- python -m src.main
+
+PowerShell без активации окружения:
+- .\.venv\Scripts\python.exe src/main.py
 
 Справка (без запуска бота):
-- ./.venv/bin/python -m src.main --help
-- ./.venv/bin/python -m src.main -h
-- ./.venv/bin/python -m src.main help
+- python src/main.py --help
+- python src/main.py -h
+- python src/main.py help
 """
 
 from asyncio import (
@@ -17,17 +21,20 @@ from asyncio import (
     get_running_loop,
     run as asyncio_run,
 )
+from io import TextIOWrapper
 from signal import SIGTERM
-from sys import argv, stderr
+from pathlib import Path
+from sys import argv, path as sys_path, platform, stderr, stdout
+
+if not __package__:
+    sys_path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from src.config import (
     HELP_TEXT,
-    PROJECT_ROOT,
     Settings,
     load_settings,
     parse_overrides,
 )
-from src.instance import acquire_instance_lock, release_instance_lock
 
 
 async def run(settings: Settings) -> None:
@@ -39,7 +46,7 @@ async def run(settings: Settings) -> None:
 
     loop = get_running_loop()
     task = current_task()
-    if task is not None:
+    if task is not None and platform != "win32":
         loop.add_signal_handler(SIGTERM, task.cancel)
 
     try:
@@ -66,13 +73,18 @@ async def run(settings: Settings) -> None:
         )
         raise
     finally:
-        if task is not None:
+        if task is not None and platform != "win32":
             loop.remove_signal_handler(SIGTERM)
         logger.info("Бот остановлен")
         await logger.complete()
 
 
 def main() -> int:
+    if platform == "win32":
+        for stream in (stdout, stderr):
+            if isinstance(stream, TextIOWrapper):
+                stream.reconfigure(encoding="utf-8")
+
     arguments = argv[1:]
     if any(
         argument in {"-h", "--help", "help"}
@@ -86,7 +98,7 @@ def main() -> int:
     except ValueError as error:
         print(
             f"Ошибка аргументов: {error} "
-            "Справка: python -m src.main --help",
+            "Справка: python src/main.py --help",
             file=stderr,
         )
         return 2
@@ -109,13 +121,7 @@ def main() -> int:
         return 1
 
     try:
-        instance_lock = acquire_instance_lock(
-            settings.bot_token, PROJECT_ROOT / "data"
-        )
-        try:
-            asyncio_run(run(settings))
-        finally:
-            release_instance_lock(instance_lock)
+        asyncio_run(run(settings))
     except (KeyboardInterrupt, CancelledError):
         pass
     except Exception as error:

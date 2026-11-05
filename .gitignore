@@ -3,6 +3,7 @@ __pycache__
 node_modules
 .env
 .venv
+venv
 Dockerfile-custom
 docker-compose.custom.yml
 
