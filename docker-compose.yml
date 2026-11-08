@@ -1,0 +1,15 @@
+volumes:
+  data:
+  logs:
+services:
+  bot:
+    image: maxbot
+    environment:
+      - BOT_TOKEN=${BOT_TOKEN}
+      - ADMIN_IDS=${ADMIN_IDS}
+      - LOG_LEVEL=${LOG_LEVEL}
+      - DATABASE_PATH=/app/data/bot.sqlite3
+      - LOG_FILE=/app/logs/bot.log
+    volumes:
+      - data:/app/data
+      - logs:/app/logs

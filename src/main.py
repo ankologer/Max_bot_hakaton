@@ -42,7 +42,10 @@ async def run(settings: Settings) -> None:
     from maxo import Bot, Dispatcher
 
     from src.database import connect_database, disconnect_database
-    from src.handlers import COMMANDS, create_router
+    from src.handlers.router import create_router
+    from src.startup import notify_admins
+    from src.texts import COMMANDS
+    from src.views import GameViews
 
     loop = get_running_loop()
     task = current_task()
@@ -51,13 +54,15 @@ async def run(settings: Settings) -> None:
 
     try:
         dispatcher = Dispatcher(disable_fsm=True)
-        dispatcher.include(create_router())
+        ui = GameViews(settings.admin_ids)
+        dispatcher.include(create_router(ui))
 
         try:
             await connect_database(settings.database_path)
             bot = Bot(token=settings.bot_token)
             async with bot.context():
                 await bot.edit_my_commands(commands=COMMANDS)
+                await notify_admins(bot, ui)
                 logger.info("Запуск long polling")
                 await dispatcher.start_polling(
                     bot,
@@ -86,12 +91,10 @@ def main() -> int:
                 stream.reconfigure(encoding="utf-8")
 
     arguments = argv[1:]
-    if any(
-        argument in {"-h", "--help", "help"}
-        for argument in arguments
-    ):
-        print(HELP_TEXT)
-        return 0
+    for argument in arguments:
+        if argument in {"-h", "--help", "help"}:
+            print(HELP_TEXT)
+            return 0
 
     try:
         overrides = parse_overrides(arguments)

@@ -53,5 +53,5 @@ RUN set -eu; \
 USER ${APP_UID}:${APP_GID}
 
 STOPSIGNAL SIGTERM
-ENTRYPOINT ["/opt/venv/bin/python", "-m", "src.main"]
+ENTRYPOINT ["/opt/venv/bin/python", "src/main.py"]
 CMD []

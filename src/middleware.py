@@ -1,44 +1,32 @@
-"""Первичный обработка событий (middleware)"""
+"""Последовательная обработка событий и сохранение пользователей."""
 
-from asyncio import Lock, get_running_loop
-from typing import Any
-from weakref import WeakValueDictionary
+from asyncio import Lock
+from time import monotonic
 
 from loguru import logger
-from maxo.routing.ctx import Ctx
-from maxo.routing.interfaces.middleware import NextMiddleware
 from maxo.routing.sentinels import UNHANDLED
-from maxo.types import BotStarted, MessageCreated
+from maxo.types import MessageCallback, MessageCreated
 
 from src.users import save_user
 
-PROCESSED_UPDATE_TTL = 60 * 60 # 1 час
+PROCESSED_UPDATE_TTL = 60 * 60  # 1 час
 
 
 class ProcessingMiddleware:
-    def __init__(self) -> None:
-        # Неактивные блокировки удаляются после последней задачи.
-        self._locks: WeakValueDictionary[
-            tuple[int, int], Lock
-        ] = WeakValueDictionary()
-        self._processed: dict[str, float] = {}
+    def __init__(self):
+        self.locks = {}
+        self.processed = {}
 
-    def _forget_processed(self, key: str, expires_at: float) -> None:
-        if self._processed.get(key) == expires_at:
-            self._processed.pop(key)
-
-    async def __call__(
-        self,
-        update: MessageCreated | BotStarted,
-        ctx: Ctx,
-        next: NextMiddleware[Any],
-    ) -> Any:
-        bot_id: int = ctx["bot"].state.info.user_id
+    async def __call__(self, update, ctx, next):
+        bot_id = ctx["bot"].state.info.user_id
         if isinstance(update, MessageCreated):
             user_id = update.message.unsafe_sender.user_id
             message_id = update.message.body.mid
             chat_id = update.message.recipient.chat_id
             key = f"{bot_id}:message:{chat_id}:{message_id}"
+        elif isinstance(update, MessageCallback):
+            user_id = update.user.user_id
+            key = f"{bot_id}:callback:{update.callback_id}"
         else:
             user_id = update.user.user_id
             key = (
@@ -46,55 +34,31 @@ class ProcessingMiddleware:
                 f"{update.timestamp.isoformat()}"
             )
 
+        # События одного игрока меняют БД по очереди.
         lock_key = (bot_id, user_id)
-        # Между поиском и добавлением нет await:
-        # две задачи не создадут разные lock для одного пользователя.
-        lock = self._locks.get(lock_key)
-        if lock is None:
-            lock = Lock()
-            self._locks[lock_key] = lock
-
-        async with lock:
-            loop = get_running_loop()
-            expires_at = self._processed.get(key, 0.0)
-            if expires_at > loop.time():
-                logger.info(
-                    "Повтор события пропущен: user_id={} key={}",
-                    user_id,
-                    key,
-                )
+        if lock_key not in self.locks:
+            self.locks[lock_key] = Lock()
+        async with self.locks[lock_key]:
+            now = monotonic()
+            for old_key in list(self.processed):
+                if self.processed[old_key] <= now:
+                    del self.processed[old_key]
+            if key in self.processed:
+                logger.info("Повтор события пропущен: {}", key)
                 return None
 
-            logger.info(
-                "Обработка события: user_id={} key={}", user_id, key
-            )
+            logger.info("Обработка события: {}", key)
             result = await next(ctx)
             if result is not UNHANDLED:
-                # При исключении или отмене до этой точки
-                # событие не помечается обработанным.
-                expires_at = loop.time() + PROCESSED_UPDATE_TTL
-                self._processed[key] = expires_at
-                loop.call_later(
-                    PROCESSED_UPDATE_TTL,
-                    self._forget_processed,
-                    key,
-                    expires_at,
-                )
-                logger.info(
-                    "Событие обработано: user_id={} key={}",
-                    user_id,
-                    key,
-                )
+                # При ошибке событие можно обработать повторно.
+                expires_at = monotonic() + PROCESSED_UPDATE_TTL
+                self.processed[key] = expires_at
+                logger.info("Событие обработано: {}", key)
             return result
 
 
 class UserContextMiddleware:
-    async def __call__(
-        self,
-        update: MessageCreated | BotStarted,
-        ctx: Ctx,
-        next: NextMiddleware[Any],
-    ) -> Any:
+    async def __call__(self, update, ctx, next):
         if isinstance(update, MessageCreated):
             user = update.message.unsafe_sender
         else:
